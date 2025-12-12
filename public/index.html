@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>麻雀待ち牌テスト</title>
+<style>
+  body {
+    text-align: center;
+    font-family: sans-serif;
+    background-color: #f8f9fa;
+  }
+
+  h1 { margin-bottom: 20px; }
+
+  #question-image { width: 1100px; max-width: 95%; height: auto; margin-bottom: 20px; }
+
+  .choice-row {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 10px;
+  }
+
+  .choice-row img {
+    margin: 2px;
+    width: 100px;
+    height: 120px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    border-radius: 5px;
+    transition: all 0.2s;
+  }
+
+  .choice-row img.selected {
+    border-color: #007bff;
+    box-shadow: 0 0 6px #007bff;
+  }
+
+  .ema-footer {
+    position: fixed;
+    right: 10px;
+    bottom: 12px;
+    font-size: 30px;
+    color: #666;
+  }
+
+  button {
+    margin-top: 15px;
+    padding: 10px 20px;
+    font-size: 18px;
+    cursor: pointer;
+    border: none;
+    border-radius: 6px;
+    background-color: #007bff;
+    color: white;
+    transition: 0.2s;
+  }
+
+  button:hover { background-color: #0056b3; }
+
+  #timer { font-size: 20px; font-weight: bold; }
+
+  .hidden { display: none; }
+
+  table { width: 90%; margin: 0 auto 20px; border-collapse: collapse; }
+  table, th, td { border: 1px solid #ccc; }
+  th, td { padding: 6px; text-align: center; }
+
+  @media (max-width: 600px) {
+    #question-image { width: 100%; max-width: 100%; }
+    .choice-row { flex-wrap: wrap; justify-content: center; }
+    .choice-row img { width: 36px; height: 44px; margin: 2px; border-radius: 4px; }
+    button { font-size: 20px; padding: 14px 24px; }
+    .ema-footer { font-size: 20px; right: 8px; bottom: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 表紙ページ -->
+<div id="cover-page">
+  <h1>麻雀待ち牌テスト</h1>
+  <p>名前を入力してください：</p>
+  <input type="text" id="user-name" placeholder="名前">
+  <p>問題数: 10問 / 制限時間: 4分30秒</p>
+  <p>回答は選択式。(複数選択可)<br>
+     「次へ」ボタンを押すとその問題には戻れない。<br>
+     制限時間が過ぎると強制終了。(時間は例題の後から計測開始)</p>
+  <button onclick="goToExample()">例題へ</button>
+  <div class="ema-footer">EMA</div>
+</div>
+
+<!-- 例題ページ -->
+<div id="example-page" class="hidden">
+  <h1>例題</h1>
+  <p>選択肢を選んで「次へ」を押してください。</p>
+  <img src="images/example.png" id="example-image">
+  <p style="font-size:16px; font-weight:bold; margin:10px 0;">
+    以下から選択してください。(複数回答可)
+  </p>
+  <div id="example-choices-container"></div>
+  <button onclick="startMainTest()">本番テストへ</button>
+  <div class="ema-footer">EMA</div>
+</div>
+
+<!-- 本番テストページ -->
+<div id="test-page" class="hidden">
+  <h1>麻雀待ち牌テスト</h1>
+  <p id="timer"></p>
+  <p id="question-number"></p>
+  <img src="" alt="問題の手牌" id="question-image">
+  <p style="font-size:16px; font-weight:bold; margin:10px 0;">
+    以下から選択してください。(複数回答可)
+  </p>
+  <div id="choices-container"></div>
+  <button id="next-btn" onclick="nextQuestion()">次の問題</button>
+  <div class="ema-footer">EMA</div>
+</div>
+
+<!-- 結果ページ -->
+<div id="result-page" class="hidden">
+  <h1>テスト結果</h1>
+  <p id="user-name-display" style="font-size:18px; font-weight:bold;"></p> 
+  <p id="summary"></p>
+  <table>
+    <thead>
+      <tr>
+        <th>問題番号</th>
+        <th>あなたの回答</th>
+        <th>正解</th>
+        <th>結果</th>
+        <th>回答時間(秒)</th>
+      </tr>
+    </thead>
+    <tbody id="result-tbody"></tbody>
+  </table>
+  <div class="ema-footer">EMA</div>
+</div>
+
+<!-- Netlifyフォーム -->
+<form name="mahjong-results" method="POST" data-netlify="true" hidden>
+  <input type="hidden" name="name">
+  <input type="hidden" name="question">
+  <input type="hidden" name="selected">
+  <input type="hidden" name="correct">
+  <input type="hidden" name="result">
+  <input type="hidden" name="timestamp">
+  <input type="hidden" name="elapsedTime">
+</form>
+
+<script>
+const totalChoices = 34;
+const totalQuestions = 10;
+
+const questions = [
+  { img:'images/q1.png', correct:['a14','a17'] },
+  { img:'images/q2.png', correct:['a2','a5','a8'] },
+  { img:'images/q3.png', correct:['a5','a6'] },
+  { img:'images/q4.png', correct:['a23','a24','a25','a26','a27'] },
+  { img:'images/q5.png', correct:['a20','a21','a23','a24'] },
+  { img:'images/q6.png', correct:['a11','a13','a14','a16','a17'] },
+  { img:'images/q7.png', correct:['a21','a24'] },
+  { img:'images/q8.png', correct:['a21','a24'] },
+  { img:'images/q9.png', correct:['a21','a22','23','24'] },
+  { img:'images/q10.png', correct:['a15','a16','a18'] },
+];
+
+let currentQuestion = 0;
+let selectedChoices = [];
+let startTime;
+let timerId;
+let allAnswers = [];
+
+// 表紙 → 例題
+function goToExample() {
+  const name = document.getElementById('user-name').value.trim();
+  if(name === '') { alert('名前を入力してください'); return; }
+  window.userName = name;
+  document.getElementById('cover-page').classList.add('hidden');
+  document.getElementById('example-page').classList.remove('hidden');
+  loadExampleChoices();
+}
+
+// 例題選択肢
+function loadExampleChoices() {
+  const container = document.getElementById('example-choices-container');
+  container.innerHTML = '';
+  const rows = [9,9,9,7];
+  let count = 1;
+  rows.forEach(rowCount => {
+    const rowDiv = document.createElement('div');
+    rowDiv.className = 'choice-row';
+    for(let i=0;i<rowCount;i++){
+      if(count>totalChoices) break;
+      const img = document.createElement('img');
+      img.src = `images/a${count}.png`;
+      img.id = `ex${count}`;
+      img.onclick = ()=>toggleSelectExample(img.id);
+      rowDiv.appendChild(img);
+      count++;
+    }
+    container.appendChild(rowDiv);
+  });
+}
+
+let selectedExample = [];
+function toggleSelectExample(id){
+  const index = selectedExample.indexOf(id);
+  const imgEl = document.getElementById(id);
+  if(index===-1){ selectedExample.push(id); imgEl.classList.add('selected'); }
+  else { selectedExample.splice(index,1); imgEl.classList.remove('selected'); }
+}
+
+// 本番テスト開始
+function startMainTest(){
+  alert("本番テストを開始します。時間は4分30秒です。");
+  document.getElementById('example-page').classList.add('hidden');
+  document.getElementById('test-page').classList.remove('hidden');
+  currentQuestion = 0;
+  selectedChoices = [];
+  allAnswers = [];
+  startTime = Date.now();
+  loadChoices();
+  showQuestion();
+  startTimer();
+}
+
+// 選択肢読み込み
+function loadChoices(){
+  const container = document.getElementById('choices-container');
+  container.innerHTML='';
+  const rows = [9,9,9,7];
+  let count=1;
+  rows.forEach(rowCount=>{
+    const rowDiv = document.createElement('div');
+    rowDiv.className='choice-row';
+    for(let i=0;i<rowCount;i++){
+      if(count>totalChoices) break;
+      const img=document.createElement('img');
+      img.src=`images/a${count}.png`;
+      img.id=`a${count}`;
+      img.onclick=()=>toggleSelect(img.id);
+      rowDiv.appendChild(img);
+      count++;
+    }
+    container.appendChild(rowDiv);
+  });
+}
+
+function toggleSelect(id){
+  const index = selectedChoices.indexOf(id);
+  const imgEl = document.getElementById(id);
+  if(index===-1){ selectedChoices.push(id); imgEl.classList.add('selected'); }
+  else { selectedChoices.splice(index,1); imgEl.classList.remove('selected'); }
+}
+
+// 問題表示
+function showQuestion(){
+  document.getElementById('question-image').src = questions[currentQuestion].img;
+  document.getElementById('question-number').textContent = `問題 ${currentQuestion + 1} / ${totalQuestions}`;
+}
+
+// タイマー
+function startTimer(){
+  let remainingTime = 270;
+  const timerDisplay = document.getElementById('timer');
+  timerId = setInterval(()=>{
+    timerDisplay.textContent=`残り時間: ${remainingTime} 秒`;
+    remainingTime--;
+    if(remainingTime<0){
+      clearInterval(timerId);
+      finishTest();
+    }
+  },1000);
+}
+
+// 次の問題
+function nextQuestion(){
+  submitAnswer();
+  currentQuestion++;
+  if(currentQuestion>=totalQuestions){
+    finishTest();
+    return;
+  }
+  selectedChoices=[];
+  for(let i=1;i<=totalChoices;i++){
+    const el = document.getElementById(`a${i}`);
+    if(el) el.classList.remove('selected');
+  }
+  showQuestion();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// 回答送信（各問題記録）
+function submitAnswer(){
+  const correctSet = new Set(questions[currentQuestion].correct);
+  const selectedSet = new Set(selectedChoices);
+  let allCorrect=true;
+  correctSet.forEach(ans=>{ if(!selectedSet.has(ans)) allCorrect=false; });
+  selectedSet.forEach(sel=>{ if(!correctSet.has(sel)) allCorrect=false; });
+
+  allAnswers.push({
+    question: currentQuestion + 1,
+    selected: [...selectedChoices],
+    correct: questions[currentQuestion].correct,
+    result: allCorrect ? '正解' : '不正解',
+    elapsedTime: Math.floor((Date.now()-startTime)/1000)
+  });
+}
+
+// テスト終了（全問まとめ送信 + 結果表示）
+function finishTest(){
+  clearInterval(timerId);
+
+  // Netlify送信
+  const form=document.forms['mahjong-results'];
+  form.name.value=window.userName;
+  form.question.value = 'まとめ送信';
+  form.selected.value = allAnswers.map(a=>a.selected.join('|')).join(';');
+  form.correct.value = allAnswers.map(a=>a.correct.join('|')).join(';');
+  form.result.value = allAnswers.map(a=>a.result).join(';');
+  form.timestamp.value=new Date().toISOString();
+  form.elapsedTime.value = Math.floor((Date.now()-startTime)/1000);
+
+  fetch("/",{
+    method:"POST",
+    headers:{"Content-Type":"application/x-www-form-urlencoded"},
+    body:new URLSearchParams(new FormData(form)).toString()
+  }).then(()=>{
+    console.log("全問まとめ送信完了");
+  }).catch(err=>{
+    console.error("送信エラー:",err);
+  });
+
+  // 結果ページ表示
+  document.getElementById('test-page').classList.add('hidden');
+  document.getElementById('result-page').classList.remove('hidden');
+  document.getElementById('user-name-display').textContent = `回答者: ${window.userName}`;
+
+  const totalCorrect = allAnswers.filter(a=>a.result==='正解').length;
+  document.getElementById('summary').textContent = `正解数: ${totalCorrect} / ${totalQuestions}`;
+
+  const tbody = document.getElementById('result-tbody');
+  tbody.innerHTML='';
+  allAnswers.forEach(a=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${a.question}</td>
+                    <td>${a.selected.join(',')}</td>
+                    <td>${a.correct.join(',')}</td>
+                    <td>${a.result}</td>
+                    <td>${a.elapsedTime}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+</script>
+</body>
+</html>
